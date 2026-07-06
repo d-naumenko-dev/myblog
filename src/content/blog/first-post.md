@@ -1,16 +1,151 @@
 ---
-title: "First post"
-description: "Lorem ipsum dolor sit amet"
-pubDate: "Jul 08 2022"
+title: "Upgrading PostgreSQL from version 11 to 12"
+description: "How to upgrade PostgreSQL from 11 to 12 using pg_upgrade."
+pubDate: "Nov 28 2019"
 heroImage: "/blog-placeholder-3.jpg"
 ---
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Vitae ultricies leo integer malesuada nunc vel risus commodo viverra. Adipiscing enim eu turpis egestas pretium. Euismod elementum nisi quis eleifend quam adipiscing. In hac habitasse platea dictumst vestibulum. Sagittis purus sit amet volutpat. Netus et malesuada fames ac turpis egestas. Eget magna fermentum iaculis eu non diam phasellus vestibulum lorem. Varius sit amet mattis vulputate enim. Habitasse platea dictumst quisque sagittis. Integer quis auctor elit sed vulputate mi. Dictumst quisque sagittis purus sit amet.
+PostgreSQL 12 was released on 2019-10-03. You can upgrade from an older version either with `pg_dumpall` or with `pg_upgrade`. The variant described below uses `pg_upgrade`.
 
-Morbi tristique senectus et netus. Id semper risus in hendrerit gravida rutrum quisque non tellus. Habitasse platea dictumst quisque sagittis purus sit amet. Tellus molestie nunc non blandit massa. Cursus vitae congue mauris rhoncus. Accumsan tortor posuere ac ut. Fringilla urna porttitor rhoncus dolor. Elit ullamcorper dignissim cras tincidunt lobortis. In cursus turpis massa tincidunt dui ut ornare lectus. Integer feugiat scelerisque varius morbi enim nunc. Bibendum neque egestas congue quisque egestas diam. Cras ornare arcu dui vivamus arcu felis bibendum. Dignissim suspendisse in est ante in nibh mauris. Sed tempus urna et pharetra pharetra massa massa ultricies mi.
+## Install PostgreSQL 12
 
-Mollis nunc sed id semper risus in. Convallis a cras semper auctor neque. Diam sit amet nisl suscipit. Lacus viverra vitae congue eu consequat ac felis donec. Egestas integer eget aliquet nibh praesent tristique magna sit amet. Eget magna fermentum iaculis eu non diam. In vitae turpis massa sed elementum. Tristique et egestas quis ipsum suspendisse ultrices. Eget lorem dolor sed viverra ipsum. Vel turpis nunc eget lorem dolor sed viverra. Posuere ac ut consequat semper viverra nam. Laoreet suspendisse interdum consectetur libero id faucibus. Diam phasellus vestibulum lorem sed risus ultricies tristique. Rhoncus dolor purus non enim praesent elementum facilisis. Ultrices tincidunt arcu non sodales neque. Tempus egestas sed sed risus pretium quam vulputate. Viverra suspendisse potenti nullam ac tortor vitae purus faucibus ornare. Fringilla urna porttitor rhoncus dolor purus non. Amet dictum sit amet justo donec enim.
+```bash
+sudo apt-get update
+sudo apt-get install postgresql-12 postgresql-server-dev-12
+```
 
-Mattis ullamcorper velit sed ullamcorper morbi tincidunt. Tortor posuere ac ut consequat semper viverra. Tellus mauris a diam maecenas sed enim ut sem viverra. Venenatis urna cursus eget nunc scelerisque viverra mauris in. Arcu ac tortor dignissim convallis aenean et tortor at. Curabitur gravida arcu ac tortor dignissim convallis aenean et tortor. Egestas tellus rutrum tellus pellentesque eu. Fusce ut placerat orci nulla pellentesque dignissim enim sit amet. Ut enim blandit volutpat maecenas volutpat blandit aliquam etiam. Id donec ultrices tincidunt arcu. Id cursus metus aliquam eleifend mi.
+Move your custom settings from the old configs into the new ones. It's convenient to review the differences between the configs of the two versions with:
 
-Tempus quam pellentesque nec nam aliquam sem. Risus at ultrices mi tempus imperdiet. Id porta nibh venenatis cras sed felis eget velit. Ipsum a arcu cursus vitae. Facilisis magna etiam tempor orci eu lobortis elementum. Tincidunt dui ut ornare lectus sit. Quisque non tellus orci ac. Blandit libero volutpat sed cras. Nec tincidunt praesent semper feugiat nibh sed pulvinar proin gravida. Egestas integer eget aliquet nibh praesent tristique magna.
+```bash
+diff /etc/postgresql/11/main/postgresql.conf /etc/postgresql/12/main/postgresql.conf
+diff /etc/postgresql/11/main/pg_hba.conf /etc/postgresql/12/main/pg_hba.conf
+```
+
+## Stop the running PostgreSQL
+
+```bash
+sudo systemctl stop postgresql.service
+```
+
+Switch to the directory for temporary files. Logs will be written there and some scripts will be added:
+
+```bash
+cd /tmp
+```
+
+Start working on the command line as the `postgres` user:
+
+```bash
+sudo su postgres
+```
+
+## Check the clusters
+
+Safely check the clusters, without modifying any data:
+
+```bash
+/usr/lib/postgresql/12/bin/pg_upgrade \
+  --old-datadir=/var/lib/postgresql/11/main \
+  --new-datadir=/var/lib/postgresql/12/main \
+  --old-bindir=/usr/lib/postgresql/11/bin \
+  --new-bindir=/usr/lib/postgresql/12/bin \
+  --old-options '-c config_file=/etc/postgresql/11/main/postgresql.conf' \
+  --new-options '-c config_file=/etc/postgresql/12/main/postgresql.conf' \
+  --check
+```
+
+## Migrate the data
+
+If there are no errors, perform the data migration (if you don't need to copy the files into the new cluster, use the `--link` parameter — hard links to the old cluster will be used, without copying):
+
+```bash
+/usr/lib/postgresql/12/bin/pg_upgrade \
+  --old-datadir=/var/lib/postgresql/11/main \
+  --new-datadir=/var/lib/postgresql/12/main \
+  --old-bindir=/usr/lib/postgresql/11/bin \
+  --new-bindir=/usr/lib/postgresql/12/bin \
+  --old-options '-c config_file=/etc/postgresql/11/main/postgresql.conf' \
+  --new-options '-c config_file=/etc/postgresql/12/main/postgresql.conf'
+```
+
+Return to your regular user:
+
+```bash
+exit
+```
+
+## Swap the ports
+
+Your old PostgreSQL most likely used port 5432, while the new one uses port 5433 by default. Swap them.
+
+```bash
+sudo vim /etc/postgresql/12/main/postgresql.conf
+# change "port = 5433" to "port = 5432"
+
+sudo vim /etc/postgresql/11/main/postgresql.conf
+# change "port = 5432" to "port = 5433"
+```
+
+## Start PostgreSQL
+
+```bash
+sudo systemctl start postgresql.service
+```
+
+Work as the `postgres` user:
+
+```bash
+sudo su postgres
+```
+
+Check the version of the running PostgreSQL:
+
+```bash
+psql -c "SELECT version();"
+```
+
+The new cluster has no statistics yet. You need to run `ANALYZE` over the cluster. For this, `pg_upgrade` created the script `analyze_new_cluster.sh`. Run it.
+
+```bash
+./analyze_new_cluster.sh
+```
+
+Return to your regular user:
+
+```bash
+exit
+```
+
+## Remove the old version
+
+See which old PostgreSQL versions remain in the system.
+
+```bash
+apt list --installed | grep postgresql
+```
+
+Remove the old PostgreSQL versions, for example:
+
+```bash
+sudo apt-get remove postgresql-11
+```
+
+Remove the old configuration:
+
+```bash
+sudo rm -rf /etc/postgresql/11/
+```
+
+Log in as the `postgres` user one last time:
+
+```bash
+sudo su postgres
+```
+
+Delete the old cluster's data:
+
+```bash
+./delete_old_cluster.sh
+```
+
+The upgrade is complete!
