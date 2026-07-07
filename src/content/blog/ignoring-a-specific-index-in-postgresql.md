@@ -2,7 +2,7 @@
 title: "How to Make a Query Ignore a Specific Index in PostgreSQL"
 description: "How to temporarily disable the use of a single index in PostgreSQL while still keeping it up to date."
 pubDate: "Dec 19 2019"
-heroImage: "/blog-placeholder-1.jpg"
+heroImage: "/blog-placeholder-4.jpg"
 ---
 
 Sometimes, for one reason or another, you need to temporarily turn off the use of an index — but in a way that still keeps the index up to date as the data changes. For example, you might want to see how a `SELECT` behaves without one of its indexes.
